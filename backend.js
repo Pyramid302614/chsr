@@ -1,8 +1,12 @@
 const server = require("http").createServer((req,res) => {
 
+   if(req.url == "/") {
+      res.writeHead(200,{"Content-Type":"text/html"});
+      res.end(require("fs").readFileSync("frontend.html"));
+   }
 
 });
-server.listen("0.0.0.0",require("./config.json").port,() => console.log("Ready when you are"));
+server.listen(require("./config.json").port,() => console.log("Ready when you are"));
 const wss = new (require("ws").WebSocket).Server({ server });
 wss.on("connection",ws => {
    ws.on("message",(m) => {
