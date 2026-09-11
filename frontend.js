@@ -1,0 +1,311 @@
+<html>
+
+
+ <head>
+
+
+   <style>
+
+
+     :root {
+       --body-padding: 10px;
+     }
+
+
+     body {
+       font-family: monospace;
+     }
+     input {
+       font-family: monospace;
+     }
+
+
+     #space {
+       width: calc(60% - var(--body-padding));
+       height: 100%;
+       border: none;
+       resize: none;
+       position: fixed;
+     }
+     #space:focus {
+       border: none;
+       outline: none;
+     }
+     #space-div {
+       width: 60%;
+       overflow: auto;
+       padding: var(--body-padding);
+     }
+
+
+     #canvas {
+       width: 100%;
+     }
+     #canvas-div {
+       border-left: inset gray 1px;
+       position: fixed;
+       right: 0;
+       width: 40%;
+       /* width: calc(40% - var(--body-padding)); */
+       height: calc(100% - calc(var(--body-padding) * 5));
+       padding: var(--body-padding);
+      
+     }
+
+
+     #console {
+       margin-top: var(--body-padding);
+       width: 100%;
+       height: 160px;
+       background-color: gray;
+       overflow: scroll;
+     }
+
+
+   </style>
+
+
+ </head>
+ <body>
+  
+   <input type="text" id="cmd"><span>&nbsp;</span><span id="cmd-out"></span>
+
+
+   <hr>
+
+
+   <div id="space-div"><textarea id="space" autocomplete="false" autocapitalize="false" spellcheck="false"></textarea></div>
+
+
+   <div id="canvas-div">
+     <canvas id="canvas" width=200 height=200></canvas>
+     <div id="console"></div>
+   </div>
+
+
+   <script>
+
+    const wsCMDs = [];
+    async function wsCMD(name,args) {
+      if(ws == null) console.log("WebSocket is null");
+      const obj = {
+        name: name,
+        resolve: () => { console.log("No resolution set"); }
+      };
+      wsCMDs.push(obj);
+      ws.send(`${name}:${args.join(":")}`);
+      return await new Promise(resolve => obj.resolve = resolve);
+    }
+
+     const WS = false;
+     var ws = null;
+     if(WS) {
+      ws = new WebSocket("&&ws");
+      ws.onmessage = async (m) => {
+        const msg = await m.data.toString();
+        const name = msg.split(":")[0];
+        const data = msg.split(":").slice(1);
+        if(name.endsWith("-resp")) {
+          for(const cmd of wsCMDs) {
+            if(cmd.name == name+"-resp") cmd.resolve(data);
+          }
+        }
+      }
+     } else ws = {
+       "send": (m) => {
+         console.log("Sent: " + m);
+       }
+     };
+    
+     var project = "?";
+
+
+     const commands = {
+       "hello": () => {
+         return "world";
+       },
+       "echo": (args) => {
+         if(args.length == 0) return "echo [T]";
+         return args[0];
+       },
+       "refrate": (args) => {
+         if(args.length == 0) return "refrate [FPS]";
+         refreshRate = 1000/parseInt(args[0]);
+         return `Set refresh rate to ${args[0]} FPS`;
+       },
+       "stop": () => {
+         going = false;
+         return "Stopped execution.";
+       },
+       "start": () => {
+         going = true;
+         return "Started execution.";
+       },
+       "open": (args) => {
+        project = args[0];
+        wsCMD("fetch",project).then(v => document.getElementById("space").value = v);
+        return "";
+       },
+       "new": (args) => {
+        project = args[0];
+        wsCMD("new",project);
+        return "New project request sent.";
+       }
+     };
+     function command(name,args) {
+         if(!Object.keys(commands).includes(name)) return {
+           type: "warning",
+           data: "Unknown command: " + name
+         };
+         try {
+           return {
+             type: "info",
+             data: commands[name](args) ?? "Command successfully ran."
+           };
+         } catch(e) {
+           return {
+             type: "error",
+             data: e
+           };
+         }
+     }
+     document.getElementById("cmd").addEventListener("keydown",k => {
+       if(k.key == "Enter") {
+         const output = command(
+           document.getElementById("cmd").value.toLowerCase().split(" ")[0],
+           document.getElementById("cmd").value.toLowerCase().split(" ").slice(1)
+         );
+         switch(output.type) {
+           case "info": document.getElementById("cmd-out").style.color = "black"; break;
+           case "warning": document.getElementById("cmd-out").style.color = "orange"; break;
+           case "error": document.getElementById("cmd-out").style.color = "red"; break;
+         }
+         document.getElementById("cmd-out").innerHTML = output.data;
+         if(output.type == "info") document.getElementById("cmd").value = "";
+       }
+     });
+
+
+     var ctrl = false;
+     window.addEventListener("keydown",k => {
+       if(k.key.toLowerCase() == "control") ctrl = true;
+       if(ctrl && k.key.toLowerCase() == "p") { k.preventDefault(); document.getElementById("cmd").focus(); }
+       if(ctrl && k.key.toLowerCase() == "s") { k.preventDefault(); pushSpace(); }
+       if(ctrl && k.key.toLowerCase() == "m") { k.preventDefault(); snapSpace(); }
+       if(k.key.toLowerCase() == "escape") {
+         if(document.activeElement.id == "cmd") document.getElementById("space").focus();
+       }
+     });
+     window.addEventListener("keyup",k => {
+       if(k.key.toLowerCase() == "control") ctrl = false;
+     });
+     function fetchSpace() {
+      
+     }
+     function pushSpace() {
+       ws.send("push:"+project+":"+document.getElementById("space").value);
+     }
+     function snapSpace() {
+       ws.send("snap:"+project+":"+document.getElementById("space").value);
+     }
+
+
+     var graphics = null;
+     const meth = { // friendly abbreviation for "methods"
+       "fill": (r,g,b,a) => {
+         if(typeof r == "object") {
+           g = r[1];
+           b = r[2];
+           a = r?.[3];
+           r = r[0];
+         }
+         a = (a == null || a == undefined) ? 255 : a;
+         graphics.fillStyle = `rgba(${r},${g},${b},${a})`;
+       },
+       "rect": (x,y,w,h) => {
+         graphics.fillRect(x,y,w,h);
+       },
+       "ellipse": (x,y,w,h) => {
+         graphics.beginPath();
+         graphics.ellipse(x,y,w,h,0,0,2*Math.PI);
+         graphics.fill();
+         graphics.stroke();
+       }
+     };
+
+
+     function frame(code,g) {
+       if(prev_e != null) clear();
+       prev_e = null;
+       try {
+         graphics = g;
+         g.clearRect(0,0,document.getElementById("canvas").width,document.getElementById("canvas").height);
+         new Function("g","GRAPHICS",code)(meth,g);
+       } catch(e) {
+         err(e);
+       }
+     }
+     var prev_uno = null;
+     function only(m) {
+       document.getElementById("console").innerHTML = m;
+     }
+     function uno(m) {
+       if(m == prev_uno) return;
+       prev_uno = m;
+       log(m);
+     }
+     function clear() {
+       document.getElementById("console").innerHTML = "";
+     }
+     function log(m) {
+       document.getElementById("console").innerHTML += `${m}<br/>`;
+     }
+     var prev_e = null;
+     function err(e) {
+       //if(e.toString() === prev_e) return;
+       prev_e = e.toString();
+       document.getElementById("console").innerHTML += `<span style='color:red;'>${e}</span><br/>`;
+     }
+     var refreshRate = 1000/30;
+     var going = true;
+     setInterval(() => {
+       if(!going) return;
+       const canvas = document.getElementById("canvas");
+       const g = canvas.getContext("2d");
+       frame(document.getElementById("space").value,g);
+     },refreshRate);
+
+
+     setInterval(() => {
+       snapSpace();
+     },10*(1000*60)); // every 10 minutes
+     snapSpace(); // starting now
+
+
+     // org.py.vedge.ii.Color class color constants mirror but not really
+     const Color = {
+       "RED": [255,0,0],
+       "ORANGE": [255,125,0],
+       "YELLOW": [255,255,0],
+       "GREEN": [0,255,0],
+       "CYAN": [0,150,150],
+       "BLUE": [0,0,255],
+       "PURPLE": [180,0,255],
+       "MAGENTA": [255,0,255],
+       "PINK": [255,150,200],
+       "BLACK": [0,0,0],
+       "WHITE": [255,255,255],
+       "GRAY": [125,125,125]
+     }
+
+
+   </script>
+
+
+ </body>
+
+
+</html>
+
+
+
