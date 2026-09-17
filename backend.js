@@ -2,13 +2,12 @@ const server = require("http").createServer((req,res) => {
 
    if(req.url == "/") {
       res.writeHead(200,{"Content-Type":"text/html"});
-      res.end((require("fs").readFileSync("frontend.html"))
+      res.end((require("fs").readFileSync("frontend.html")).toString()
 	.replaceAll("&&ws","wss://chsr.pyramidstudios.xyz"));
    }
 
 });
 const wss = new (require("ws").WebSocket).Server({ server });
-server.listen("0.0.0.0",require("./config.json").port,() => console.log("Ready when you are"));
 wss.on("connection",ws => {
    ws.on("message",(m) => {
        const msg = m.toString();
@@ -44,4 +43,4 @@ function getProject(name, contents) {
 }
 
 
-
+server.listen(require("./config.json").port,() => console.log("Ready when you are"));
