@@ -2,12 +2,13 @@ const server = require("http").createServer((req,res) => {
 
    if(req.url == "/") {
       res.writeHead(200,{"Content-Type":"text/html"});
-      res.end(require("fs").readFileSync("frontend.html"));
+      res.end((require("fs").readFileSync("frontend.html"))
+	.replaceAll("&&ws","wss://chsr.pyramidstudios.xyz"));
    }
 
 });
-server.listen(require("./config.json").port,() => console.log("Ready when you are"));
 const wss = new (require("ws").WebSocket).Server({ server });
+server.listen("0.0.0.0",require("./config.json").port,() => console.log("Ready when you are"));
 wss.on("connection",ws => {
    ws.on("message",(m) => {
        const msg = m.toString();
@@ -15,9 +16,9 @@ wss.on("connection",ws => {
        const args = msg.split(":").slice(1);
        switch(name) {
            case "fetch": ws.send(`fetch-resp:${getProject(args[0])}`); break;
-           case "push": updateProject(args[0],args[1]); break;
+           case "push": updateProject(args[0],msg.slice(args[0].length+1)); break;
            case "new": newProject(args[0]); break;
-           case "snap": snapProject(args[0],args[1]); break;
+           case "snap": snapProject(args[0],msg.slice(args[0].length+1)); break;
        }
    });
 });

@@ -97,7 +97,7 @@
       return await new Promise(resolve => obj.resolve = resolve);
     }
 
-     const WS = false;
+     const WS = true;
      var ws = null;
      if(WS) {
       ws = new WebSocket("&&ws");
